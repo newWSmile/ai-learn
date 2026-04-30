@@ -149,6 +149,33 @@ public class LocalKnowledgeBase {
                             """)
                     .keywords(List.of("周报", "数据完整", "dataEnough", "预警总数", "处置完成率", "重复预警", "设备离线"))
                     .priority(100)
+                    .build(),
+
+            KnowledgeChunk.builder()
+                    .id("mclz_morning_check_not_submitted")
+                    .title("晨检台账未提交说明")
+                    .category(KnowledgeCategory.LEDGER_RULE)
+                    .source("台账管理规则")
+                    .content("""
+                            晨检台账未提交是指学校或食堂未按要求记录或提交从业人员晨检情况。
+                            该类问题属于台账管理类问题，通常用于提示学校在从业人员健康检查、晨检记录留痕、台账提交及时性等方面需要进一步规范。
+                            在监管报告中，可表述为"晨检台账存在未提交情况，需进一步核查从业人员晨检记录及台账补录情况"。
+                            如输入数据未提供具体原因，不应直接归因为学校管理不到位或人员责任缺失。
+                            """)
+                    .keywords(List.of(
+                            "晨检",
+                            "晨检台账",
+                            "晨午检",
+                            "台账未提交",
+                            "未提交",
+                            "没有提交",
+                            "未填报",
+                            "未上报",
+                            "从业人员晨检",
+                            "健康检查",
+                            "台账补录"
+                    ))
+                    .priority(85)
                     .build()
     );
 

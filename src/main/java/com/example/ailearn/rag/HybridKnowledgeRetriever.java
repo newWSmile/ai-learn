@@ -84,6 +84,15 @@ public class HybridKnowledgeRetriever {
     private final EmbeddingKnowledgeRetriever embeddingKnowledgeRetriever;
 
     /**
+     * 台账类业务规则加权
+     *
+     * 说明：
+     * 当用户问题明确是晨检、留样、消毒、陪餐等台账类问题时，
+     * 台账知识应优先于通用报告表达知识。
+     */
+    private static final double LEDGER_RULE_BOOST = 0.50D;
+
+    /**
      * 执行混合检索
      *
      * @param question 用户问题
@@ -207,6 +216,12 @@ public class HybridKnowledgeRetriever {
                 && containsAny(title + content, "摄像头遮挡", "遮挡", "画面被挡")) {
             addRuleScore(match, -0.50D, "离线问题下遮挡类知识降权");
         }
+
+        // 规则：用户问晨检、晨午检、留样、消毒、陪餐等台账问题时，提高台账类知识优先级
+        if (containsAny(question, "台账", "晨检", "晨午检", "留样", "消毒", "陪餐", "未提交", "没有提交", "未上报", "未填报")
+                && KnowledgeCategory.LEDGER_RULE.equals(match.getCategory())) {
+            addRuleScore(match, LEDGER_RULE_BOOST, "命中台账类业务规则");
+        }
     }
 
     /**
@@ -229,7 +244,8 @@ public class HybridKnowledgeRetriever {
                 "遮挡", "挡住", "看不见", "画面被挡", "被挡住",
                 "垃圾桶", "未盖", "没盖",
                 "未戴帽子", "未戴口罩", "未着工装",
-                "抽烟", "鼠患", "火情", "视频时间异常"
+                "抽烟", "鼠患", "火情", "视频时间异常",
+                "台账", "晨检", "晨午检", "留样", "消毒", "陪餐", "未提交", "未上报", "未填报"
         );
     }
 
