@@ -40,6 +40,7 @@ public class AiCallLogService {
                     record.getBizType(), record.getSuccess(), record.getCostMs(), needReview);
 
             AiCallLogEntity entity = convertToEntity(record, needReview);
+            entity.setGmtCreate(formatDateTime(LocalDateTime.now()));
             aiCallLogMapper.insert(entity);
         } catch (Exception e) {
             log.error("AI调用日志入库失败, bizType={}", record.getBizType(), e);
@@ -51,7 +52,7 @@ public class AiCallLogService {
         AiCallLogEntity entity = new AiCallLogEntity();
 
         entity.setId(String.valueOf(IdUtil.getSnowflakeNextId()));
-        entity.setBizType(record.getBizType() == null ? null : record.getBizType());
+        entity.setBizType(record.getBizType() == null ? null : record.getBizType().name());
         entity.setModelName(record.getModelName());
         entity.setUserInput(record.getUserInput());
         entity.setPrompt(record.getPrompt());
@@ -61,7 +62,6 @@ public class AiCallLogService {
         entity.setErrorMessage(record.getErrorMessage());
         entity.setCostMs(record.getCostMs());
         entity.setNeedReview(toInteger(needReview));
-        entity.setGmtCreate(formatDateTime(record.getCreateTime()));
 
         return entity;
     }

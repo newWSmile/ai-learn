@@ -1,0 +1,33 @@
+package com.example.ailearn.model.dto.rp;
+
+
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+
+@Data
+@Builder
+public class RagChatResult {
+
+    /**
+     * AI回答
+     */
+    private String answer;
+
+    /**
+     * 是否命中知识库
+     */
+    private Boolean knowledgeHit;
+
+    /**
+     * 命中的知识片段标题
+     */
+    private List<String> matchedKnowledgeTitles;
+
+    /**
+     * 是否需要人工复核
+     */
+    private Boolean needReview;
+}

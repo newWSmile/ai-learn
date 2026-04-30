@@ -76,7 +76,7 @@ public class AiChatService {
                     finalAnswer.length());
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.CHAT.name(),
+                    AiBizType.CHAT,
                     message,
                     message,
                     answer,
@@ -96,7 +96,7 @@ public class AiChatService {
             String fallback = "AI 服务暂时不可用，请稍后再试。";
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.CHAT.name(),
+                    AiBizType.CHAT,
                     message,
                     message,
                     null,
@@ -166,7 +166,7 @@ public class AiChatService {
                     data.length());
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.RISK_ANALYSIS.name(),
+                    AiBizType.RISK_ANALYSIS,
                     data,
                     userPrompt,
                     toJsonSafely(result),
@@ -186,7 +186,7 @@ public class AiChatService {
             RiskAnalysisResult fallback = riskAnalysisValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.RISK_ANALYSIS.name(),
+                    AiBizType.RISK_ANALYSIS,
                     data,
                     userPrompt,
                     null,
@@ -225,7 +225,7 @@ public class AiChatService {
                     data.length());
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.WEEKLY_REPORT.name(),
+                    AiBizType.WEEKLY_REPORT,
                     data,
                     userPrompt,
                     toJsonSafely(result),
@@ -249,7 +249,7 @@ public class AiChatService {
             WeeklyReportResult fallback = weeklyReportValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
 
             aiCallLogService.record(buildLogRecord(
-                    AiBizType.WEEKLY_REPORT.name(),
+                    AiBizType.WEEKLY_REPORT,
                     data,
                     userPrompt,
                     null,
@@ -312,7 +312,7 @@ public class AiChatService {
     }
 
 
-    private AiCallLogRecord buildLogRecord(String bizType,
+    private AiCallLogRecord buildLogRecord(AiBizType bizType,
                                            String userInput,
                                            String prompt,
                                            String responseText,
@@ -322,6 +322,7 @@ public class AiChatService {
                                            Long costMs,
                                            Boolean needReview) {
         AiCallLogRecord record = new AiCallLogRecord();
+
         record.setBizType(bizType);
         record.setModelName(modelName);
         record.setUserInput(userInput);
@@ -332,7 +333,7 @@ public class AiChatService {
         record.setErrorMessage(errorMessage);
         record.setCostMs(costMs);
         record.setNeedReview(needReview);
-        record.setCreateTime(LocalDateTime.now());
+
         return record;
     }
 

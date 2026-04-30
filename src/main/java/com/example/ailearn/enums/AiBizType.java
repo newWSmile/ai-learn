@@ -4,7 +4,9 @@ public enum AiBizType {
 
     CHAT("普通对话"),
     RISK_ANALYSIS("风险分析"),
-    WEEKLY_REPORT("周报生成");
+    WEEKLY_REPORT("周报生成"),
+    RAG_CHAT("RAG对话"),
+    ;
 
     private final String desc;
 

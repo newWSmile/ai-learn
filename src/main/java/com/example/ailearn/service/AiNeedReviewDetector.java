@@ -10,10 +10,6 @@ import java.util.List;
 @Component
 public class AiNeedReviewDetector {
 
-    /**
-     * 偏强判断词：
-     * 不是绝对禁止，但出现在监管报告、风险分析、周报中时，建议人工复核。
-     */
     private static final List<String> STRONG_JUDGEMENT_WORDS = List.of(
             "管理松懈",
             "责任缺失",
@@ -30,10 +26,6 @@ public class AiNeedReviewDetector {
             "重点监管对象"
     );
 
-    /**
-     * 越界统计口径词：
-     * 如果输入数据没有提供对应口径，AI 却输出这些词，通常需要人工复核。
-     */
     private static final List<String> OUT_OF_SCOPE_STAT_WORDS = List.of(
             "累计",
             "共计",
@@ -52,15 +44,17 @@ public class AiNeedReviewDetector {
             "接近一半"
     );
 
-    public boolean detect(String bizType,
+    public boolean detect(AiBizType bizType,
                           Boolean currentNeedReview,
                           String responseText,
                           String finalResult) {
 
+        // 如果业务层已经明确标记需要复核，直接保留 true
         if (Boolean.TRUE.equals(currentNeedReview)) {
             return true;
         }
 
+        // 只对需要强监管表达控制的业务类型做自动检测
         if (!needDetectBizType(bizType)) {
             return false;
         }
@@ -82,13 +76,13 @@ public class AiNeedReviewDetector {
         return false;
     }
 
-    private boolean needDetectBizType(String bizType) {
-        if (bizType == null || bizType.isBlank()) {
+    private boolean needDetectBizType(AiBizType bizType) {
+        if (bizType == null) {
             return false;
         }
 
-        return "RISK_ANALYSIS".equals(bizType)
-                || "WEEKLY_REPORT".equals(bizType);
+        return bizType == AiBizType.RISK_ANALYSIS
+                || bizType == AiBizType.WEEKLY_REPORT;
     }
 
     private String chooseText(String responseText, String finalResult) {
