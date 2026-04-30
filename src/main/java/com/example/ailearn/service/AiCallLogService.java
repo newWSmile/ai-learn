@@ -1,5 +1,6 @@
 package com.example.ailearn.service;
 
+import cn.hutool.core.util.IdUtil;
 import com.example.ailearn.mapper.AiCallLogMapper;
 import com.example.ailearn.model.dao.AiCallLogRecord;
 import com.example.ailearn.model.entity.AiCallLogEntity;
@@ -16,63 +17,60 @@ public class AiCallLogService {
 
     private final AiCallLogMapper aiCallLogMapper;
 
+    private final AiNeedReviewDetector aiNeedReviewDetector;
+
     private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public AiCallLogService(AiCallLogMapper aiCallLogMapper) {
+    public AiCallLogService(AiCallLogMapper aiCallLogMapper, AiNeedReviewDetector aiNeedReviewDetector) {
         this.aiCallLogMapper = aiCallLogMapper;
+        this.aiNeedReviewDetector = aiNeedReviewDetector;
     }
 
     public void record(AiCallLogRecord record) {
-        if (record == null) {
-            return;
-        }
-
-        log.info("AI调用日志，bizType={}, modelName={}, success={}, costMs={}, needReview={}, userInputLength={}, promptLength={}, responseLength={}, errorMessage={}",
-                record.getBizType(),
-                record.getModelName(),
-                record.getSuccess(),
-                record.getCostMs(),
-                record.getNeedReview(),
-                length(record.getUserInput()),
-                length(record.getPrompt()),
-                length(record.getResponseText()),
-                record.getErrorMessage());
-
-
         try {
-            AiCallLogEntity entity = convertToEntity(record);
+            boolean needReview = aiNeedReviewDetector.detect(
+                    record.getBizType(),
+                    record.getNeedReview(),
+                    record.getResponseText(),
+                    record.getFinalResult()
+            );
+
+            log.info("记录AI调用日志, bizType={}, success={}, costMs={}, needReview={}",
+                    record.getBizType(), record.getSuccess(), record.getCostMs(), needReview);
+
+            AiCallLogEntity entity = convertToEntity(record, needReview);
             aiCallLogMapper.insert(entity);
         } catch (Exception e) {
-            // 注意：AI调用日志入库失败，不应该影响主业务接口返回
-            log.error("AI调用日志入库失败，bizType={}, modelName={}, success={}",
-                    record.getBizType(),
-                    record.getModelName(),
-                    record.getSuccess(),
-                    e);
+            log.error("AI调用日志入库失败, bizType={}", record.getBizType(), e);
         }
     }
 
-    private int length(String text) {
-        return text == null ? 0 : text.length();
-    }
 
-
-    private AiCallLogEntity convertToEntity(AiCallLogRecord record) {
+    private AiCallLogEntity convertToEntity(AiCallLogRecord record, boolean needReview) {
         AiCallLogEntity entity = new AiCallLogEntity();
-        entity.setId(SnowflakeIdUtil.nextIdStr());
-        entity.setBizType(record.getBizType());
+
+        entity.setId(String.valueOf(IdUtil.getSnowflakeNextId()));
+        entity.setBizType(record.getBizType() == null ? null : record.getBizType());
         entity.setModelName(record.getModelName());
         entity.setUserInput(record.getUserInput());
         entity.setPrompt(record.getPrompt());
         entity.setResponseText(record.getResponseText());
         entity.setFinalResult(record.getFinalResult());
-        entity.setSuccess(Boolean.TRUE.equals(record.getSuccess()) ? 1 : 0);
+        entity.setSuccess(toInteger(record.getSuccess()));
         entity.setErrorMessage(record.getErrorMessage());
         entity.setCostMs(record.getCostMs());
-        entity.setNeedReview(Boolean.TRUE.equals(record.getNeedReview()) ? 1 : 0);
+        entity.setNeedReview(toInteger(needReview));
         entity.setGmtCreate(formatDateTime(record.getCreateTime()));
+
         return entity;
+    }
+
+    private Integer toInteger(Boolean value) {
+        if (value == null) {
+            return 0;
+        }
+        return value ? 1 : 0;
     }
 
     private String formatDateTime(LocalDateTime dateTime) {
