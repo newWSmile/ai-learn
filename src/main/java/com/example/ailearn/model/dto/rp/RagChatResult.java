@@ -27,6 +27,11 @@ public class RagChatResult {
     private List<String> matchedKnowledgeTitles;
 
     /**
+     * 命中的知识片段来源
+     */
+    private List<String> matchedKnowledgeSources;
+
+    /**
      * 是否需要人工复核
      */
     private Boolean needReview;

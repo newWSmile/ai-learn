@@ -1,6 +1,7 @@
 package com.example.ailearn.rag;
 
 
+import com.example.ailearn.enums.KnowledgeCategory;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -12,6 +13,8 @@ public class LocalKnowledgeBase {
             KnowledgeChunk.builder()
                     .id("mclz_alarm_type")
                     .title("明厨亮灶AI预警类型")
+                    .category(KnowledgeCategory.ALARM_TYPE)
+                    .source("系统内置知识库")
                     .content("""
                             当前平台支持的明厨亮灶AI预警类型包括：
                             1. 未戴帽子；
@@ -25,36 +28,68 @@ public class LocalKnowledgeBase {
                             9. 摄像头离线；
                             10. 视频时间异常。
                             """)
-                    .keywords(List.of("预警类型", "AI预警", "明厨亮灶", "未戴帽子", "未戴口罩", "摄像头离线"))
+                    .keywords(List.of(
+                            "预警类型",
+                            "AI预警类型",
+                            "支持哪些预警",
+                            "有哪些预警",
+                            "预警清单",
+                            "明厨亮灶预警"
+                    ))
+                    .priority(100)
                     .build(),
 
             KnowledgeChunk.builder()
-                    .id("mclz_offline_camera")
+                    .id("mclz_camera_offline")
                     .title("摄像头离线说明")
+                    .category(KnowledgeCategory.DEVICE_OPERATION)
+                    .source("设备运维规则")
                     .content("""
                             摄像头离线是指明厨亮灶视频监控点位无法正常接入平台，
                             可能影响后厨视频查看、AI识别、预警留痕和监管取证。
-                            在监管报告中，摄像头离线应作为设备运维类问题进行描述，
-                            不应直接归因为学校管理不到位，除非输入数据明确提供原因。
+                            在监管报告中，摄像头离线应作为设备运维类问题描述。
+                            如输入数据未提供具体原因，不应直接归因为学校管理不到位。
                             """)
-                    .keywords(List.of("摄像头离线", "设备离线", "视频离线", "设备运维"))
+                    .keywords(List.of("摄像头离线", "设备离线", "视频离线", "设备运维", "监管取证", "视频查看"))
+                    .priority(90)
+                    .build(),
+
+            KnowledgeChunk.builder()
+                    .id("mclz_camera_blocked")
+                    .title("摄像头遮挡说明")
+                    .category(KnowledgeCategory.DEVICE_OPERATION)
+                    .source("设备运维规则")
+                    .content("""
+                            摄像头遮挡是指视频画面被物体、人员或其他因素遮挡，
+                            导致后厨关键区域无法被正常查看或识别。
+                            在监管报告中，可表述为“部分视频点位存在画面遮挡情况，
+                            需进一步核查点位环境并恢复有效监看”。
+                            不宜在缺少依据时直接认定为人为故意遮挡。
+                            """)
+                    .keywords(List.of("摄像头遮挡", "视频遮挡", "画面遮挡", "监看", "点位环境"))
+                    .priority(80)
                     .build(),
 
             KnowledgeChunk.builder()
                     .id("mclz_garbage_bin")
                     .title("垃圾桶未盖预警说明")
+                    .category(KnowledgeCategory.ALARM_EXPLANATION)
+                    .source("AI预警解释规则")
                     .content("""
                             垃圾桶未盖属于后厨环境卫生类AI预警。
                             该类预警通常用于提示废弃物存放、后厨卫生管理、操作区域环境规范等问题。
-                            在正式分析中，可以表述为“环境卫生相关操作需进一步规范”，
+                            在正式分析中，可以表述为“环境卫生相关操作需进一步规范”。
                             不宜直接使用“管理混乱”“责任缺失”等问责性表述。
                             """)
-                    .keywords(List.of("垃圾桶未盖", "环境卫生", "废弃物", "卫生管理"))
+                    .keywords(List.of("垃圾桶未盖", "环境卫生", "废弃物", "卫生管理", "后厨环境"))
+                    .priority(90)
                     .build(),
 
             KnowledgeChunk.builder()
                     .id("mclz_report_style")
                     .title("明厨亮灶监管报告表达要求")
+                    .category(KnowledgeCategory.REPORT_STYLE)
+                    .source("报告表达规则")
                     .content("""
                             明厨亮灶监管报告应保持正式、客观、审慎。
                             不得编造学校名称、金额、排名、比例。
@@ -62,7 +97,23 @@ public class LocalKnowledgeBase {
                             数据不足时，应说明“当前数据不足，无法判断”。
                             建议使用“已提供数据中显示”“需进一步核查”“建议补充统计口径”等保守表达。
                             """)
-                    .keywords(List.of("报告", "周报", "监管报告", "表达要求", "数据不足", "不得编造"))
+                    .keywords(List.of("报告", "周报", "监管报告", "表达要求", "数据不足", "不得编造", "客观", "审慎"))
+                    .priority(95)
+                    .build(),
+
+            KnowledgeChunk.builder()
+                    .id("mclz_weekly_report_data_enough")
+                    .title("周报数据完整性规则")
+                    .category(KnowledgeCategory.REPORT_STYLE)
+                    .source("周报生成规则")
+                    .content("""
+                            生成明厨亮灶周报时，建议至少具备接入学校数、食堂数、AI预警总数、
+                            主要预警类型、处置完成率、重复预警、设备离线、票证或台账异常等多维数据。
+                            如果仅提供单一指标，例如只有AI预警总数，应判断为数据不足，
+                            不宜生成完整周报，只能提示补充数据或完善统计口径。
+                            """)
+                    .keywords(List.of("周报", "数据完整", "dataEnough", "预警总数", "处置完成率", "重复预警", "设备离线"))
+                    .priority(100)
                     .build()
     );
 

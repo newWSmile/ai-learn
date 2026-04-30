@@ -39,6 +39,10 @@ public class RagChatService {
 
         String prompt = buildPrompt(question, chunks);
 
+        if (!knowledgeHit) {
+            return buildNoKnowledgeResult(question, prompt, start);
+        }
+
         try {
             String answer = chatClientBuilder.build().prompt()
                     .user(prompt)
@@ -49,6 +53,7 @@ public class RagChatService {
                     .answer(answer)
                     .knowledgeHit(knowledgeHit)
                     .matchedKnowledgeTitles(chunks.stream().map(KnowledgeChunk::getTitle).toList())
+                    .matchedKnowledgeSources(chunks.stream().map(KnowledgeChunk::getSource).toList())
                     .needReview(!knowledgeHit)
                     .build();
 
@@ -73,6 +78,7 @@ public class RagChatService {
                     .answer("当前AI问答服务暂不可用，请稍后重试。")
                     .knowledgeHit(knowledgeHit)
                     .matchedKnowledgeTitles(chunks.stream().map(KnowledgeChunk::getTitle).toList())
+                    .matchedKnowledgeSources(chunks.stream().map(KnowledgeChunk::getSource).toList())
                     .needReview(true)
                     .build();
 
@@ -91,6 +97,33 @@ public class RagChatService {
 
             return fallback;
         }
+    }
+
+    private RagChatResult buildNoKnowledgeResult(String question, String prompt, long start) {
+        String answer = "当前知识库资料不足，无法准确回答。建议补充产品文档、接口说明、业务规则或知识库资料后再进行分析。";
+
+        RagChatResult result = RagChatResult.builder()
+                .answer(answer)
+                .knowledgeHit(false)
+                .matchedKnowledgeTitles(List.of())
+                .matchedKnowledgeSources(List.of())
+                .needReview(true)
+                .build();
+
+        aiCallLogService.record(AiCallLogRecord.builder()
+                .bizType(AiBizType.RAG_CHAT)
+                .modelName(modelName)
+                .userInput(question)
+                .prompt(prompt)
+                .responseText(answer)
+                .finalResult(toJsonSafely(result))
+                .success(true)
+                .errorMessage(null)
+                .costMs(System.currentTimeMillis() - start)
+                .needReview(true)
+                .build());
+
+        return result;
     }
 
     private String buildPrompt(String question, List<KnowledgeChunk> chunks) {
@@ -132,6 +165,8 @@ public class RagChatService {
             KnowledgeChunk chunk = chunks.get(i);
             builder.append("资料").append(i + 1).append("：").append("\n");
             builder.append("标题：").append(chunk.getTitle()).append("\n");
+            builder.append("分类：").append(chunk.getCategory()).append("\n");
+            builder.append("来源：").append(chunk.getSource()).append("\n");
             builder.append("内容：").append(chunk.getContent()).append("\n");
             builder.append("\n");
         }

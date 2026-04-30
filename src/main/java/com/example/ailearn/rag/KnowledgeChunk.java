@@ -6,27 +6,43 @@ import lombok.Data;
 
 import java.util.List;
 
+
 @Data
 @Builder
 public class KnowledgeChunk {
 
     /**
-     * 知识片段ID
+     * 知识片段ID，全局唯一
      */
     private String id;
 
     /**
-     * 标题
+     * 知识标题
      */
     private String title;
 
     /**
-     * 内容
+     * 知识分类
+     */
+    private String category;
+
+    /**
+     * 知识来源，例如：系统内置、产品说明、报告模板、业务规则
+     */
+    private String source;
+
+    /**
+     * 知识正文
      */
     private String content;
 
     /**
-     * 关键词，用于本地检索
+     * 检索关键词
      */
     private List<String> keywords;
+
+    /**
+     * 优先级，数字越大越优先
+     */
+    private Integer priority;
 }
