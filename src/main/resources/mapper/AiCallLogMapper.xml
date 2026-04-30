@@ -103,4 +103,20 @@
         LIMIT 1
     </select>
 
+    <select id="selectRecentMissingKnowledge" resultType="com.example.ailearn.model.vo.MissingKnowledgeItemVO">
+        SELECT
+        id AS id,
+        user_input AS question,
+        model_name AS modelName,
+        cost_ms AS costMs,
+        need_review AS needReview,
+        gmt_create AS gmtCreate
+        FROM ai_call_log
+        WHERE biz_type = 'RAG_CHAT'
+        AND success = 1
+        AND need_review = 1
+        AND model_name = 'SYSTEM_FALLBACK'
+        ORDER BY gmt_create DESC
+        LIMIT #{limit}
+    </select>
 </mapper>
