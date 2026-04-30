@@ -1,13 +1,18 @@
 package com.example.ailearn.service;
 
 import com.example.ailearn.config.AiPromptProperties;
+import com.example.ailearn.enums.AiBizType;
+import com.example.ailearn.model.dao.AiCallLogRecord;
 import com.example.ailearn.model.dto.rp.RiskAnalysisResult;
 import com.example.ailearn.model.dto.rp.WeeklyReportResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -20,11 +25,20 @@ public class AiChatService {
 
     private final WeeklyReportValidator weeklyReportValidator;
 
+    private final AiCallLogService aiCallLogService;
+
+
+    @Value("${spring.ai.openai.chat.options.model}")
+    private String modelName;
+
+    private final ObjectMapper objectMapper;
 
     public AiChatService(ChatClient.Builder chatClientBuilder,
                          AiPromptProperties aiPromptProperties,
                          RiskAnalysisValidator riskAnalysisValidator,
-                         WeeklyReportValidator weeklyReportValidator) {
+                         WeeklyReportValidator weeklyReportValidator,
+                         AiCallLogService aiCallLogService,
+                         ObjectMapper objectMapper) {
         if (!StringUtils.hasText(aiPromptProperties.getSystem())) {
             throw new IllegalArgumentException("AI System Prompt 未配置，请检查 ai.prompt.system");
         }
@@ -34,6 +48,8 @@ public class AiChatService {
                 .build();
         this.riskAnalysisValidator = riskAnalysisValidator;
         this.weeklyReportValidator = weeklyReportValidator;
+        this.aiCallLogService = aiCallLogService;
+        this.objectMapper = objectMapper;
     }
 
 
@@ -52,19 +68,46 @@ public class AiChatService {
 
             long cost = System.currentTimeMillis() - start;
 
+            String finalAnswer = answer == null ? "AI 未返回有效内容。" : answer;
+
             log.info("AI普通对话调用成功，耗时：{}ms，用户问题：{}，回答长度：{}",
                     cost,
                     message,
-                    answer == null ? 0 : answer.length());
+                    finalAnswer.length());
 
-            return answer == null ? "AI 未返回有效内容。" : answer;
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.CHAT.name(),
+                    message,
+                    message,
+                    answer,
+                    finalAnswer,
+                    true,
+                    null,
+                    cost,
+                    false
+            ));
 
+            return finalAnswer;
         } catch (Exception e) {
             long cost = System.currentTimeMillis() - start;
 
             log.error("AI普通对话调用失败，耗时：{}ms，用户问题：{}", cost, message, e);
 
-            return "AI 服务暂时不可用，请稍后再试。";
+            String fallback = "AI 服务暂时不可用，请稍后再试。";
+
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.CHAT.name(),
+                    message,
+                    message,
+                    null,
+                    fallback,
+                    false,
+                    e.getMessage(),
+                    cost,
+                    true
+            ));
+
+            return fallback;
         }
     }
 
@@ -114,16 +157,47 @@ public class AiChatService {
                     .call()
                     .entity(RiskAnalysisResult.class);
 
-            long cost = System.currentTimeMillis() - start;
-            log.info("AI风险分析调用成功，耗时：{}ms", cost);
+            RiskAnalysisResult finalResult = riskAnalysisValidator.validateAndFix(result);
 
-            return riskAnalysisValidator.validateAndFix(result);
+            long cost = System.currentTimeMillis() - start;
+
+            log.info("AI风险分析调用成功，耗时：{}ms，输入数据长度：{}",
+                    cost,
+                    data.length());
+
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.RISK_ANALYSIS.name(),
+                    data,
+                    userPrompt,
+                    toJsonSafely(result),
+                    toJsonSafely(finalResult),
+                    true,
+                    null,
+                    cost,
+                    Boolean.FALSE.equals(finalResult.getDataEnough())
+            ));
+
+            return finalResult;
 
         } catch (Exception e) {
             long cost = System.currentTimeMillis() - start;
             log.error("AI风险分析调用失败，耗时：{}ms，输入数据：{}", cost, data, e);
 
-            return riskAnalysisValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
+            RiskAnalysisResult fallback = riskAnalysisValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
+
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.RISK_ANALYSIS.name(),
+                    data,
+                    userPrompt,
+                    null,
+                    toJsonSafely(fallback),
+                    false,
+                    e.getMessage(),
+                    cost,
+                    true
+            ));
+
+            return fallback;
         }
     }
 
@@ -142,13 +216,27 @@ public class AiChatService {
                     .call()
                     .entity(WeeklyReportResult.class);
 
+            WeeklyReportResult finalResult = weeklyReportValidator.validateAndFix(result);
+
             long cost = System.currentTimeMillis() - start;
 
             log.info("AI周报生成调用成功，耗时：{}ms，输入数据长度：{}",
                     cost,
                     data.length());
 
-            return weeklyReportValidator.validateAndFix(result);
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.WEEKLY_REPORT.name(),
+                    data,
+                    userPrompt,
+                    toJsonSafely(result),
+                    toJsonSafely(finalResult),
+                    true,
+                    null,
+                    cost,
+                    Boolean.FALSE.equals(finalResult.getDataEnough())
+            ));
+
+            return finalResult;
 
         } catch (Exception e) {
             long cost = System.currentTimeMillis() - start;
@@ -158,7 +246,21 @@ public class AiChatService {
                     data,
                     e);
 
-            return weeklyReportValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
+            WeeklyReportResult fallback = weeklyReportValidator.buildFallback("AI 服务调用失败：" + e.getMessage());
+
+            aiCallLogService.record(buildLogRecord(
+                    AiBizType.WEEKLY_REPORT.name(),
+                    data,
+                    userPrompt,
+                    null,
+                    toJsonSafely(fallback),
+                    false,
+                    e.getMessage(),
+                    cost,
+                    true
+            ));
+
+            return fallback;
         }
     }
 
@@ -206,6 +308,44 @@ public class AiChatService {
             15. 不得使用“整改流于形式”“管理混乱”“责任缺失”等结论性、问责性表述，除非输入数据明确提供相关依据。
             """
                 .formatted(data);
+    }
+
+
+    private AiCallLogRecord buildLogRecord(String bizType,
+                                           String userInput,
+                                           String prompt,
+                                           String responseText,
+                                           String finalResult,
+                                           Boolean success,
+                                           String errorMessage,
+                                           Long costMs,
+                                           Boolean needReview) {
+        AiCallLogRecord record = new AiCallLogRecord();
+        record.setBizType(bizType);
+        record.setModelName(modelName);
+        record.setUserInput(userInput);
+        record.setPrompt(prompt);
+        record.setResponseText(responseText);
+        record.setFinalResult(finalResult);
+        record.setSuccess(success);
+        record.setErrorMessage(errorMessage);
+        record.setCostMs(costMs);
+        record.setNeedReview(needReview);
+        record.setCreateTime(LocalDateTime.now());
+        return record;
+    }
+
+    private String toJsonSafely(Object object) {
+        if (object == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(object);
+        } catch (Exception e) {
+            log.warn("对象转JSON失败，objectClass={}", object.getClass().getName(), e);
+            return String.valueOf(object);
+        }
     }
 
 }

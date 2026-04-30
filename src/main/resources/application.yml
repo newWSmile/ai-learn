@@ -5,6 +5,13 @@ spring:
   application:
     name: ai-learn
 
+  datasource:
+    url: jdbc:sqlite:./data/ai-learn.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+
   ai:
     openai:
       api-key: ${DASHSCOPE_API_KEY}
