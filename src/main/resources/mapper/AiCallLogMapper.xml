@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.ailearn.mapper.AiCallLogMapper">
+
+    <resultMap id="AiCallLogResultMap" type="com.example.ailearn.model.entity.AiCallLogEntity">
+        <id column="id" property="id"/>
+
+        <result column="biz_type" property="bizType"/>
+        <result column="model_name" property="modelName"/>
+        <result column="user_input" property="userInput"/>
+        <result column="prompt" property="prompt"/>
+        <result column="response_text" property="responseText"/>
+        <result column="final_result" property="finalResult"/>
+        <result column="success" property="success"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="cost_ms" property="costMs"/>
+        <result column="need_review" property="needReview"/>
+        <result column="gmt_create" property="gmtCreate"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.example.ailearn.model.entity.AiCallLogEntity">
+        INSERT INTO ai_call_log (
+        id,
+        biz_type,
+        model_name,
+        user_input,
+        prompt,
+        response_text,
+        final_result,
+        success,
+        error_message,
+        cost_ms,
+        need_review,
+        gmt_create
+        )
+        VALUES (
+        #{id},
+        #{bizType},
+        #{modelName},
+        #{userInput},
+        #{prompt},
+        #{responseText},
+        #{finalResult},
+        #{success},
+        #{errorMessage},
+        #{costMs},
+        #{needReview},
+        #{gmtCreate}
+        )
+    </insert>
+
+    <select id="selectRecent" resultMap="AiCallLogResultMap">
+        SELECT
+        id,
+        biz_type,
+        model_name,
+        user_input,
+        prompt,
+        response_text,
+        final_result,
+        success,
+        error_message,
+        cost_ms,
+        need_review,
+        gmt_create
+        FROM ai_call_log
+        WHERE 1 = 1
+
+        <if test="bizType != null and bizType != ''">
+            AND biz_type = #{bizType}
+        </if>
+
+        <if test="success != null">
+            AND success = #{success}
+        </if>
+
+        <if test="needReview != null">
+            AND need_review = #{needReview}
+        </if>
+
+        ORDER BY gmt_create DESC
+        LIMIT #{limit}
+    </select>
+    <select id="selectById"  resultMap="AiCallLogResultMap">
+        SELECT
+        id,
+        biz_type,
+        model_name,
+        user_input,
+        prompt,
+        response_text,
+        final_result,
+        success,
+        error_message,
+        cost_ms,
+        need_review,
+        gmt_create
+        FROM ai_call_log
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+</mapper>
