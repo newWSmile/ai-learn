@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.ailearn.mapper.KnowledgeChunkMapper">
+
+    <select id="selectEnabledList" resultType="com.example.ailearn.model.entity.KnowledgeChunkEntity">
+        SELECT
+        id AS id,
+        title AS title,
+        category AS category,
+        source AS source,
+        content AS content,
+        keywords AS keywords,
+        priority AS priority,
+        enabled AS enabled,
+        gmt_create AS gmtCreate,
+        gmt_modified AS gmtModified
+        FROM knowledge_chunk
+        WHERE enabled = 1
+        ORDER BY priority DESC, gmt_create DESC
+    </select>
+
+</mapper>

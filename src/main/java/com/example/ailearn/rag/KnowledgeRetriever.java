@@ -2,6 +2,7 @@ package com.example.ailearn.rag;
 
 
 import com.example.ailearn.enums.KnowledgeCategory;
+import com.example.ailearn.repository.DatabaseKnowledgeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -14,8 +15,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class KnowledgeRetriever {
 
-    private final LocalKnowledgeBase localKnowledgeBase;
-
+    private final DatabaseKnowledgeRepository databaseKnowledgeRepository;
     /**
      * 根据问题，从知识库中检索匹配的片段
      *  标题命中：+10
@@ -30,7 +30,7 @@ public class KnowledgeRetriever {
             return List.of();
         }
 
-        List<KnowledgeChunk> matchedChunks = localKnowledgeBase.listAll().stream()
+        List<KnowledgeChunk> matchedChunks = databaseKnowledgeRepository.listEnabledKnowledgeChunks().stream()
                 .map(chunk -> new ScoredChunk(chunk, score(question, chunk)))
                 .filter(scoredChunk -> scoredChunk.score() > 5)
                 .sorted(Comparator
