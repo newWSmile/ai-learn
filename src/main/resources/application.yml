@@ -5,6 +5,10 @@ spring:
   application:
     name: ai-learn
 
+  devtools:
+    restart:
+      enabled: false
+
   datasource:
     url: jdbc:sqlite:./data/ai-learn.db
     driver-class-name: org.sqlite.JDBC
@@ -21,9 +25,6 @@ spring:
           model: qwen3.6-flash
           temperature: 0.2
 
-  devtools:
-    restart:
-      enabled: false
 
 
 mybatis:
