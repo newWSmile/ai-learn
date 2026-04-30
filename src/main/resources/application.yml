@@ -24,6 +24,10 @@ spring:
         options:
           model: qwen3.6-flash
           temperature: 0.2
+      embedding:
+        options:
+         model: text-embedding-v4
+         dimensions: 1024
 
 
 
