@@ -6,11 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -85,7 +81,7 @@ public class HybridKnowledgeRetriever {
 
     /**
      * 台账类业务规则加权
-     *
+     * <p>
      * 说明：
      * 当用户问题明确是晨检、留样、消毒、陪餐等台账类问题时，
      * 台账知识应优先于通用报告表达知识。
@@ -217,8 +213,33 @@ public class HybridKnowledgeRetriever {
             addRuleScore(match, -0.50D, "离线问题下遮挡类知识降权");
         }
 
-        // 规则：用户问晨检、晨午检、留样、消毒、陪餐等台账问题时，提高台账类知识优先级
-        if (containsAny(question, "台账", "晨检", "晨午检", "留样", "消毒", "陪餐", "未提交", "没有提交", "未上报", "未填报")
+        // 规则：用户明确问留样时，提高留样知识优先级
+        if (containsAny(question, "留样", "食品留样", "留样台账")
+                && containsAny(title + content, "留样", "食品留样", "留样台账")) {
+            addRuleScore(match, 0.50D, "命中留样台账业务规则");
+        }
+
+        // 规则：用户明确问留样台账时，晨检类知识降权
+        if (containsAny(question, "留样", "食品留样", "留样台账")
+                && containsAny(title + content, "晨检", "晨午检", "从业人员晨检")) {
+            addRuleScore(match, -1.50D, "留样问题下晨检类知识降权");
+        }
+
+        // 规则：用户明确问晨检时，提高晨检知识优先级
+        if (containsAny(question, "晨检", "晨午检", "从业人员晨检")
+                && containsAny(title + content, "晨检", "晨午检", "从业人员晨检")) {
+            addRuleScore(match, 0.50D, "命中晨检台账业务规则");
+        }
+
+        // 规则：用户明确问晨检台账时，留样类知识降权
+        if (containsAny(question, "晨检", "晨午检", "从业人员晨检")
+                && containsAny(title + content, "留样", "食品留样", "留样台账")) {
+            addRuleScore(match, -1.50D, "晨检问题下留样类知识降权");
+        }
+
+        // 规则：用户问台账问题，但没有明确子类型时，提高台账类知识优先级
+        if (!containsAny(question, "留样", "食品留样", "留样台账", "晨检", "晨午检", "从业人员晨检")
+                && containsAny(question, "台账", "消毒", "陪餐", "未提交", "没有提交", "未上报", "未填报")
                 && KnowledgeCategory.LEDGER_RULE.equals(match.getCategory())) {
             addRuleScore(match, LEDGER_RULE_BOOST, "命中台账类业务规则");
         }
@@ -233,7 +254,7 @@ public class HybridKnowledgeRetriever {
 
     /**
      * 判断用户问题中是否包含明确业务问题
-     *
+     * <p>
      * 说明：
      * 如果包含明确业务问题，就应该优先返回具体业务知识；
      * 报告表达要求只能作为辅助知识。

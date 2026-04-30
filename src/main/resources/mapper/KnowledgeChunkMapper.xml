@@ -22,4 +22,100 @@
         ORDER BY priority DESC, gmt_create DESC
     </select>
 
+    <select id="selectList" resultType="com.example.ailearn.model.entity.KnowledgeChunkEntity">
+        SELECT
+        id AS id,
+        title AS title,
+        category AS category,
+        source AS source,
+        content AS content,
+        keywords AS keywords,
+        priority AS priority,
+        enabled AS enabled,
+        gmt_create AS gmtCreate,
+        gmt_modified AS gmtModified
+        FROM knowledge_chunk
+        WHERE 1 = 1
+        <if test="category != null and category != ''">
+            AND category = #{category}
+        </if>
+        <if test="enabled != null">
+            AND enabled = #{enabled}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+            title LIKE '%' || #{keyword} || '%'
+            OR content LIKE '%' || #{keyword} || '%'
+            OR keywords LIKE '%' || #{keyword} || '%'
+            OR source LIKE '%' || #{keyword} || '%'
+            )
+        </if>
+        ORDER BY priority DESC, gmt_modified DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectById" resultType="com.example.ailearn.model.entity.KnowledgeChunkEntity">
+        SELECT
+        id AS id,
+        title AS title,
+        category AS category,
+        source AS source,
+        content AS content,
+        keywords AS keywords,
+        priority AS priority,
+        enabled AS enabled,
+        gmt_create AS gmtCreate,
+        gmt_modified AS gmtModified
+        FROM knowledge_chunk
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.example.ailearn.model.entity.KnowledgeChunkEntity">
+        INSERT INTO knowledge_chunk (
+        id,
+        title,
+        category,
+        source,
+        content,
+        keywords,
+        priority,
+        enabled,
+        gmt_create,
+        gmt_modified
+        ) VALUES (
+        #{id},
+        #{title},
+        #{category},
+        #{source},
+        #{content},
+        #{keywords},
+        #{priority},
+        #{enabled},
+        #{gmtCreate},
+        #{gmtModified}
+        )
+    </insert>
+
+    <update id="updateById" parameterType="com.example.ailearn.model.entity.KnowledgeChunkEntity">
+        UPDATE knowledge_chunk
+        SET
+        title = #{title},
+        category = #{category},
+        source = #{source},
+        content = #{content},
+        keywords = #{keywords},
+        priority = #{priority},
+        enabled = #{enabled},
+        gmt_modified = #{gmtModified}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateEnabled">
+        UPDATE knowledge_chunk
+        SET
+        enabled = #{enabled},
+        gmt_modified = #{gmtModified}
+        WHERE id = #{id}
+    </update>
+
 </mapper>
