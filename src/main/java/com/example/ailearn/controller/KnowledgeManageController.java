@@ -1,6 +1,7 @@
 package com.example.ailearn.controller;
 
 import com.example.ailearn.model.dto.base.ApiResult;
+import com.example.ailearn.model.dto.rp.EmbeddingReloadResult;
 import com.example.ailearn.model.dto.rq.KnowledgeCreateRequest;
 import com.example.ailearn.model.dto.rq.KnowledgeStatusRequest;
 import com.example.ailearn.model.dto.rq.KnowledgeUpdateRequest;
@@ -84,8 +85,8 @@ public class KnowledgeManageController {
      * 手动刷新知识库向量
      */
     @PostMapping("/reload")
-    public ApiResult<String> reload() {
-        String result = knowledgeManageService.reload();
+    public ApiResult<EmbeddingReloadResult> reload() {
+        EmbeddingReloadResult result = knowledgeManageService.reload();
         return ApiResult.success(result);
     }
 }

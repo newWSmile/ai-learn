@@ -4,6 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.example.ailearn.mapper.KnowledgeChunkMapper;
+import com.example.ailearn.model.dto.rp.EmbeddingReloadResult;
 import com.example.ailearn.model.dto.rq.KnowledgeCreateRequest;
 import com.example.ailearn.model.dto.rq.KnowledgeUpdateRequest;
 import com.example.ailearn.model.entity.KnowledgeChunkEntity;
@@ -175,9 +176,17 @@ public class KnowledgeManageService {
     /**
      * 手动刷新知识向量
      */
-    public String reload() {
-        reloadEmbeddingSafely();
-        return "知识库已重新加载，Embedding 内存向量已刷新。";
+    public EmbeddingReloadResult reload() {
+        EmbeddingReloadResult result = embeddingKnowledgeRetriever.reload();
+
+        log.info("手动刷新知识库Embedding完成，knowledgeCount={}，loadedCount={}，reusedCount={}，generatedCount={}，failedCount={}",
+                result.getKnowledgeCount(),
+                result.getLoadedCount(),
+                result.getReusedCount(),
+                result.getGeneratedCount(),
+                result.getFailedCount());
+
+        return result;
     }
 
     /**
@@ -202,15 +211,17 @@ public class KnowledgeManageService {
 
     /**
      * 安全刷新 Embedding 向量
-     *
-     * 说明：
-     * 这里捕获异常，避免知识保存成功后，因为向量刷新失败导致接口整体失败。
-     * 如果刷新失败，日志会记录，后续也可以手动调用 /ai/knowledge/reload。
      */
     private void reloadEmbeddingSafely() {
         try {
-            embeddingKnowledgeRetriever.reload();
-            log.info("知识库Embedding向量刷新成功");
+            EmbeddingReloadResult result = embeddingKnowledgeRetriever.reload();
+
+            log.info("知识库Embedding向量刷新成功，knowledgeCount={}，loadedCount={}，reusedCount={}，generatedCount={}，failedCount={}",
+                    result.getKnowledgeCount(),
+                    result.getLoadedCount(),
+                    result.getReusedCount(),
+                    result.getGeneratedCount(),
+                    result.getFailedCount());
         } catch (Exception e) {
             log.error("知识库Embedding向量刷新失败", e);
         }

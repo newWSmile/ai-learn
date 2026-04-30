@@ -82,3 +82,51 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_enabled_priority
 -- 修改时间索引：便于后续查询最近修改的知识片段
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_gmt_modified
     ON knowledge_chunk(gmt_modified);
+
+
+
+-- RAG知识片段Embedding向量表
+-- 用途：保存 knowledge_chunk 对应的 Embedding 向量，避免每次启动或reload都重新调用Embedding模型
+CREATE TABLE IF NOT EXISTS knowledge_chunk_embedding (
+    -- 主键ID，建议使用雪花ID
+                                                         id VARCHAR(64) PRIMARY KEY,
+
+    -- 知识片段ID，对应 knowledge_chunk.id
+                                                         knowledge_id VARCHAR(64) NOT NULL,
+
+    -- Embedding模型名称，例如 text-embedding-v4
+                                                         model_name VARCHAR(100) NOT NULL,
+
+    -- 向量维度，例如 1024
+                                                         dimension INTEGER,
+
+    -- 知识向量化文本的哈希值
+    -- 用途：判断知识标题、内容、关键词等是否发生变化
+                                                         content_hash VARCHAR(128) NOT NULL,
+
+    -- Embedding向量数据
+    -- 学习阶段使用JSON数组字符串存储，例如 [0.001, -0.002, ...]
+                                                         embedding_vector TEXT NOT NULL,
+
+    -- 创建时间，格式 yyyy-MM-dd HH:mm:ss
+                                                         gmt_create VARCHAR(20),
+
+    -- 修改时间，格式 yyyy-MM-dd HH:mm:ss
+                                                         gmt_modified VARCHAR(20)
+);
+
+-- 同一个知识片段，在同一个模型下只能有一条向量记录
+CREATE UNIQUE INDEX IF NOT EXISTS uk_knowledge_chunk_embedding_knowledge_model
+    ON knowledge_chunk_embedding(knowledge_id, model_name);
+
+-- 模型名称索引：便于后续按模型查询或迁移
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_model_name
+    ON knowledge_chunk_embedding(model_name);
+
+-- 内容哈希索引：便于判断知识内容是否变化
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_content_hash
+    ON knowledge_chunk_embedding(content_hash);
+
+-- 修改时间索引：便于后续排查最近更新的向量
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_gmt_modified
+    ON knowledge_chunk_embedding(gmt_modified);

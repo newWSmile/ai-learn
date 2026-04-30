@@ -1,6 +1,8 @@
 package com.example.ailearn.rag;
 
-
+import com.example.ailearn.model.dto.rp.EmbeddingReloadResult;
+import com.example.ailearn.model.vo.StoredEmbeddingVector;
+import com.example.ailearn.repository.DatabaseEmbeddingRepository;
 import com.example.ailearn.repository.DatabaseKnowledgeRepository;
 import com.example.ailearn.utils.VectorUtils;
 import jakarta.annotation.PostConstruct;
@@ -12,124 +14,145 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
+/**
+ * Embedding 知识检索器
+ *
+ * Day 24 改造：
+ * 1. reload时优先复用数据库持久化向量；
+ * 2. 只有知识内容变化时才重新生成向量；
+ * 3. reload返回复用数、新生成数、失败数。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class EmbeddingKnowledgeRetriever {
 
+    private static final double MIN_SCORE = 0.60D;
+
+    private static final int TOP_K = 2;
 
     private final EmbeddingModel embeddingModel;
+
+    private final DatabaseKnowledgeRepository databaseKnowledgeRepository;
+
+    private final DatabaseEmbeddingRepository databaseEmbeddingRepository;
 
     /**
      * 内存中的知识向量
      */
     private final List<EmbeddedKnowledgeChunk> embeddedChunks = new ArrayList<>();
 
-    private static final double MIN_SCORE = 0.60D;
-
-    private static final int TOP_K = 2;
-
-    private final DatabaseKnowledgeRepository databaseKnowledgeRepository;
-
-
     @PostConstruct
     public void init() {
-        log.info("开始初始化本地知识库向量");
         reload();
     }
 
     /**
      * 重新加载知识向量
-     * <p>
-     * 说明：
-     * Day 22 先在启动时调用。
-     * Day 23 做知识库管理接口后，可以在新增或修改知识后手动调用 reload。
      */
-    public synchronized void reload() {
+    public synchronized EmbeddingReloadResult reload() {
         embeddedChunks.clear();
 
+        EmbeddingReloadResult result = new EmbeddingReloadResult();
+
         List<KnowledgeChunk> chunks = databaseKnowledgeRepository.listEnabledKnowledgeChunks();
+        result.setKnowledgeCount(chunks == null ? 0 : chunks.size());
 
         if (chunks == null || chunks.isEmpty()) {
-            log.warn("Embedding知识向量初始化跳过：数据库中暂无启用知识片段");
-            return;
+            log.warn("Embedding知识向量刷新跳过：数据库中暂无启用知识片段");
+            return result;
         }
 
         for (KnowledgeChunk chunk : chunks) {
             try {
-                // 用标题 + 内容 + 关键词一起生成向量，提高语义覆盖
                 String embeddingText = buildEmbeddingText(chunk);
 
-                float[] vector = embeddingModel.embed(embeddingText);
+                StoredEmbeddingVector storedVector = databaseEmbeddingRepository.loadOrCreateVector(
+                        chunk,
+                        embeddingText,
+                        () -> embeddingModel.embed(embeddingText)
+                );
 
                 EmbeddedKnowledgeChunk embeddedChunk = new EmbeddedKnowledgeChunk();
                 embeddedChunk.setChunk(chunk);
-                embeddedChunk.setVector(vector);
+                embeddedChunk.setVector(storedVector.getVector());
 
                 embeddedChunks.add(embeddedChunk);
+                result.setLoadedCount(result.getLoadedCount() + 1);
+
+                if (Boolean.TRUE.equals(storedVector.getReused())) {
+                    result.setReusedCount(result.getReusedCount() + 1);
+                } else {
+                    result.setGeneratedCount(result.getGeneratedCount() + 1);
+                }
             } catch (Exception e) {
-                log.error("知识片段生成Embedding失败，chunkId={}，title={}", chunk.getId(), chunk.getTitle(), e);
+                result.setFailedCount(result.getFailedCount() + 1);
+                log.error("知识片段Embedding向量加载失败，chunkId={}，title={}",
+                        chunk.getId(), chunk.getTitle(), e);
             }
         }
 
-        log.info("Embedding知识向量初始化完成，count={}", embeddedChunks.size());
+        log.info("Embedding知识向量刷新完成，knowledgeCount={}，loadedCount={}，reusedCount={}，generatedCount={}，failedCount={}",
+                result.getKnowledgeCount(),
+                result.getLoadedCount(),
+                result.getReusedCount(),
+                result.getGeneratedCount(),
+                result.getFailedCount());
+
+        return result;
     }
 
-    public List<KnowledgeChunk> retrieve(String question) {
-        return retrieveWithScore(question).stream()
-                .map(ScoredKnowledgeChunk::getChunk)
-                .toList();
-    }
-
+    /**
+     * 语义检索
+     */
     public List<ScoredKnowledgeChunk> retrieveWithScore(String question) {
-        if (question == null || question.isBlank()) {
+        if (question == null || question.trim().isEmpty()) {
+            log.warn("Embedding检索失败：question为空");
             return List.of();
         }
 
-        if (embeddedChunks == null || embeddedChunks.isEmpty()) {
-            log.warn("本地知识库向量为空");
+        if (embeddedChunks.isEmpty()) {
+            log.warn("Embedding检索失败：内存中暂无知识向量");
             return List.of();
         }
 
         float[] questionVector = embeddingModel.embed(question);
 
-        List<ScoredKnowledgeChunk> scoredChunks = embeddedChunks.stream()
-                .map(embeddedChunk -> ScoredKnowledgeChunk.builder()
-                        .chunk(embeddedChunk.getChunk())
-                        .score(VectorUtils.cosineSimilarity(questionVector, embeddedChunk.getVector()))
-                        .build())
-                .filter(scoredChunk -> scoredChunk.getScore() >= MIN_SCORE)
-                .sorted(Comparator.comparingDouble(ScoredKnowledgeChunk::getScore).reversed())
+        return embeddedChunks.stream()
+                .map(item -> {
+                    double score = VectorUtils.cosineSimilarity(questionVector, item.getVector());
+
+                    ScoredKnowledgeChunk scored = new ScoredKnowledgeChunk();
+                    scored.setChunk(item.getChunk());
+                    scored.setScore(score);
+                    return scored;
+                })
+                .filter(item -> item.getScore() >= MIN_SCORE)
+                .sorted(Comparator.comparing(ScoredKnowledgeChunk::getScore).reversed())
                 .limit(TOP_K)
-                .toList();
-
-        log.info("Embedding知识检索完成, question={}, matchedCount={}, matched={}",
-                question,
-                scoredChunks.size(),
-                scoredChunks.stream()
-                        .map(item -> item.getChunk().getTitle() + ":" + item.getScore())
-                        .toList());
-
-        return scoredChunks;
+                .collect(Collectors.toList());
     }
 
+    /**
+     * 构建用于生成Embedding的文本
+     */
     private String buildEmbeddingText(KnowledgeChunk chunk) {
+        String keywords = chunk.getKeywords() == null ? "" : String.join("，", chunk.getKeywords());
+
         return """
                 标题：%s
                 分类：%s
                 来源：%s
-                内容：%s
                 关键词：%s
+                内容：%s
                 """.formatted(
                 chunk.getTitle(),
                 chunk.getCategory(),
                 chunk.getSource(),
-                chunk.getContent(),
-                chunk.getKeywords()
+                keywords,
+                chunk.getContent()
         );
-    }
-
-    private record ScoredEmbeddedChunk(KnowledgeChunk chunk, double score) {
     }
 }
