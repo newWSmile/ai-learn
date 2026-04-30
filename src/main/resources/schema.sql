@@ -130,3 +130,55 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_content_hash
 -- 修改时间索引：便于后续排查最近更新的向量
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_gmt_modified
     ON knowledge_chunk_embedding(gmt_modified);
+
+
+
+-- RAG知识片段变更日志表
+-- 用途：记录 knowledge_chunk 的新增、修改、启用、禁用等操作，便于追踪知识变化历史
+CREATE TABLE IF NOT EXISTS knowledge_chunk_change_log (
+    -- 主键ID，建议使用雪花ID
+                                                          id VARCHAR(64) PRIMARY KEY,
+
+    -- 知识片段ID，对应 knowledge_chunk.id
+                                                          knowledge_id VARCHAR(64) NOT NULL,
+
+    -- 操作类型
+    -- CREATE：新增知识
+    -- UPDATE：修改知识
+    -- ENABLE：启用知识
+    -- DISABLE：禁用知识
+    -- RELOAD：刷新知识库向量，通常不记录单条知识变化，可选
+                                                          operation_type VARCHAR(30) NOT NULL,
+
+    -- 变更前数据，JSON字符串
+    -- 新增知识时可为空
+                                                          before_data TEXT,
+
+    -- 变更后数据，JSON字符串
+    -- 修改、启用、禁用时记录变更后的知识数据
+                                                          after_data TEXT,
+
+    -- 变更说明，例如 新增知识、修改知识内容、禁用知识片段
+                                                          remark VARCHAR(500),
+
+    -- 操作人
+    -- 学习阶段可默认 SYSTEM
+    -- 后续接入登录用户后可改成真实用户ID或用户名
+                                                          operator VARCHAR(100),
+
+    -- 创建时间，格式 yyyy-MM-dd HH:mm:ss
+                                                          gmt_create VARCHAR(20)
+);
+
+-- 知识ID索引：便于查询某条知识的变更历史
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_change_log_knowledge_id
+    ON knowledge_chunk_change_log(knowledge_id);
+
+-- 操作类型索引：便于按新增、修改、启用、禁用筛选
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_change_log_operation_type
+    ON knowledge_chunk_change_log(operation_type);
+
+-- 创建时间索引：便于按时间倒序查看最近变更
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_change_log_gmt_create
+    ON knowledge_chunk_change_log(gmt_create);
+
