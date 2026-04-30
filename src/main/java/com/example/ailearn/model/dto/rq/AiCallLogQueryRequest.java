@@ -8,7 +8,7 @@ public class AiCallLogQueryRequest {
 
     /**
      * 业务类型：
-     * CHAT / RISK_ANALYSIS / WEEKLY_REPORT
+     * CHAT / RISK_ANALYSIS / WEEKLY_REPORT / RAG_CHAT
      */
     private AiBizType bizType;
 
