@@ -129,18 +129,9 @@ public class HybridKnowledgeRetriever {
         }
 
         // 4. 按最终分数倒序排序，并过滤低分结果
-        List<HybridKnowledgeMatch> result = matchMap.values()
-                .stream()
-                .filter(match -> match.getFinalScore() >= MIN_FINAL_SCORE)
-                .sorted(Comparator.comparing(HybridKnowledgeMatch::getFinalScore).reversed())
-                .limit(TOP_K)
-                .collect(Collectors.toList());
+        List<HybridKnowledgeMatch> result = matchMap.values().stream().filter(match -> match.getFinalScore() >= MIN_FINAL_SCORE).sorted(Comparator.comparing(HybridKnowledgeMatch::getFinalScore).reversed()).limit(TOP_K).collect(Collectors.toList());
 
-        log.info("混合检索完成，question={}，keywordHitCount={}，embeddingHitCount={}，finalHitCount={}",
-                question,
-                keywordChunks.size(),
-                embeddingChunks.size(),
-                result.size());
+        log.info("混合检索完成，question={}，keywordHitCount={}，embeddingHitCount={}，finalHitCount={}", question, keywordChunks.size(), embeddingChunks.size(), result.size());
 
         return result;
     }
@@ -171,76 +162,41 @@ public class HybridKnowledgeRetriever {
         String title = defaultString(match.getTitle());
         String content = defaultString(match.getContent());
 
-        // 规则1：用户问“离线 / 掉线 / 无法接入”，优先提高“摄像头离线说明”
-        if (containsAny(question, "离线", "掉线", "无法接入", "断开", "不在线")
-                && containsAny(title + content, "摄像头离线", "离线", "掉线")) {
-            addRuleScore(match, STRONG_RULE_BOOST, "命中离线类业务规则");
-        }
-
-        // 规则2：用户问“遮挡 / 挡住 / 看不见 / 画面被挡”，优先提高“摄像头遮挡说明”
-        if (containsAny(question, "遮挡", "挡住", "看不见", "画面被挡", "被挡住", "画面异常")
-                && containsAny(title + content, "摄像头遮挡", "遮挡", "画面被挡")) {
-            addRuleScore(match, STRONG_RULE_BOOST, "命中遮挡类业务规则");
-        }
-
-        // 规则3：用户问“垃圾桶未盖”，优先提高“垃圾桶未盖预警说明”
-        if (containsAny(question, "垃圾桶", "未盖", "没盖", "垃圾桶未盖")
-                && containsAny(title + content, "垃圾桶未盖", "垃圾桶")) {
-            addRuleScore(match, STRONG_RULE_BOOST, "命中垃圾桶未盖业务规则");
-        }
-
-        // 规则4：用户问“报告 / 怎么写 / 表述”时，报告表达要求可以作为辅助知识
-        if (containsAny(question, "报告", "怎么写", "如何写", "表述", "描述", "分析")
-                && containsAny(title + content, "报告", "表达", "表述")) {
-            addRuleScore(match, REPORT_STYLE_RULE_BOOST, "命中报告表达辅助规则");
-        }
-
-        // 规则5：如果问题中已经包含明确业务问题，则报告表达类知识降权
-        // 例如：点位掉线、摄像头遮挡、垃圾桶未盖，这些都应该优先返回具体业务知识
-        if (isSpecificBusinessQuestion(question) && isReportStyle(match)) {
-            addRuleScore(match, REPORT_STYLE_AUXILIARY_PENALTY, "业务问题下报告表达知识作为辅助知识降权");
-        }
-
-        // 规则：用户明确问遮挡类问题时，离线类知识降权
-        if (containsAny(question, "遮挡", "挡住", "看不见", "画面被挡", "被挡住")
-                && containsAny(title + content, "摄像头离线", "离线", "掉线", "无法接入")) {
-            addRuleScore(match, -0.50D, "遮挡问题下离线类知识降权");
-        }
-
-        // 规则：用户明确问离线类问题时，遮挡类知识降权
-        if (containsAny(question, "离线", "掉线", "无法接入", "不在线", "断开")
-                && containsAny(title + content, "摄像头遮挡", "遮挡", "画面被挡")) {
-            addRuleScore(match, -0.50D, "离线问题下遮挡类知识降权");
-        }
-
         // 规则：用户明确问留样时，提高留样知识优先级
-        if (containsAny(question, "留样", "食品留样", "留样台账")
-                && containsAny(title + content, "留样", "食品留样", "留样台账")) {
+        if (containsAny(question, "留样", "食品留样", "留样台账") && containsAny(title + content, "留样", "食品留样", "留样台账")) {
             addRuleScore(match, 0.50D, "命中留样台账业务规则");
         }
 
-        // 规则：用户明确问留样台账时，晨检类知识降权
-        if (containsAny(question, "留样", "食品留样", "留样台账")
-                && containsAny(title + content, "晨检", "晨午检", "从业人员晨检")) {
-            addRuleScore(match, -1.50D, "留样问题下晨检类知识降权");
+        // 规则：用户明确问留样时，其他台账子类型降权
+        if (containsAny(question, "留样", "食品留样", "留样台账") && containsAny(title + content, "晨检", "晨午检", "从业人员晨检", "消毒", "消毒台账", "消毒记录")) {
+            addRuleScore(match, -1.50D, "留样问题下其他台账类知识降权");
         }
 
+
         // 规则：用户明确问晨检时，提高晨检知识优先级
-        if (containsAny(question, "晨检", "晨午检", "从业人员晨检")
-                && containsAny(title + content, "晨检", "晨午检", "从业人员晨检")) {
+        if (containsAny(question, "晨检", "晨午检", "从业人员晨检") && containsAny(title + content, "晨检", "晨午检", "从业人员晨检")) {
             addRuleScore(match, 0.50D, "命中晨检台账业务规则");
         }
 
-        // 规则：用户明确问晨检台账时，留样类知识降权
-        if (containsAny(question, "晨检", "晨午检", "从业人员晨检")
-                && containsAny(title + content, "留样", "食品留样", "留样台账")) {
-            addRuleScore(match, -1.50D, "晨检问题下留样类知识降权");
+        // 规则：用户明确问晨检时，其他台账子类型降权
+        if (containsAny(question, "晨检", "晨午检", "从业人员晨检") && containsAny(title + content, "留样", "食品留样", "留样台账", "消毒", "消毒台账", "消毒记录")) {
+            addRuleScore(match, -1.50D, "晨检问题下其他台账类知识降权");
         }
 
-        // 规则：用户问台账问题，但没有明确子类型时，提高台账类知识优先级
-        if (!containsAny(question, "留样", "食品留样", "留样台账", "晨检", "晨午检", "从业人员晨检")
-                && containsAny(question, "台账", "消毒", "陪餐", "未提交", "没有提交", "未上报", "未填报")
-                && KnowledgeCategory.LEDGER_RULE.equals(match.getCategory())) {
+
+        // 规则：用户明确问消毒时，提高消毒知识优先级
+        if (containsAny(question, "消毒", "消毒台账", "消毒记录") && containsAny(title + content, "消毒", "消毒台账", "消毒记录")) {
+            addRuleScore(match, 0.50D, "命中消毒台账业务规则");
+        }
+
+        // 规则：用户明确问消毒时，其他台账子类型降权
+        if (containsAny(question, "消毒", "消毒台账", "消毒记录") && containsAny(title + content, "留样", "食品留样", "留样台账", "晨检", "晨午检", "从业人员晨检")) {
+            addRuleScore(match, -1.50D, "消毒问题下其他台账类知识降权");
+        }
+
+
+        // 规则：用户问泛台账问题，但没有明确子类型时，提高台账类知识优先级
+        if (!containsAny(question, "留样", "食品留样", "留样台账", "晨检", "晨午检", "从业人员晨检", "消毒", "消毒台账", "消毒记录") && containsAny(question, "台账", "陪餐", "未提交", "没有提交", "未上报", "未填报") && KnowledgeCategory.LEDGER_RULE.equals(match.getCategory())) {
             addRuleScore(match, LEDGER_RULE_BOOST, "命中台账类业务规则");
         }
     }
@@ -260,14 +216,7 @@ public class HybridKnowledgeRetriever {
      * 报告表达要求只能作为辅助知识。
      */
     private boolean isSpecificBusinessQuestion(String question) {
-        return containsAny(question,
-                "离线", "掉线", "无法接入", "不在线", "断开",
-                "遮挡", "挡住", "看不见", "画面被挡", "被挡住",
-                "垃圾桶", "未盖", "没盖",
-                "未戴帽子", "未戴口罩", "未着工装",
-                "抽烟", "鼠患", "火情", "视频时间异常",
-                "台账", "晨检", "晨午检", "留样", "消毒", "陪餐", "未提交", "未上报", "未填报"
-        );
+        return containsAny(question, "离线", "掉线", "无法接入", "不在线", "断开", "遮挡", "挡住", "看不见", "画面被挡", "被挡住", "垃圾桶", "未盖", "没盖", "未戴帽子", "未戴口罩", "未着工装", "抽烟", "鼠患", "火情", "视频时间异常", "台账", "晨检", "晨午检", "留样", "消毒", "陪餐", "未提交", "未上报", "未填报");
     }
 
     /**
