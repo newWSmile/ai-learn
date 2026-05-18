@@ -407,4 +407,19 @@ public class KnowledgeManageService {
         return !beforeKeywords.equals(requestKeywords);
     }
 
+    /**
+     * 根据用户输入的标题或关键词查询知识候选
+     *
+     * 说明：
+     * 用于工具调用中，当用户没有提供 knowledgeId 时，
+     * 根据“留样台账未提交说明”这类自然语言名称反查知识片段。
+     */
+    public List<KnowledgeChunkVO> searchCandidates(String keyword, Integer limit) {
+        if (StrUtil.isBlank(keyword)) {
+            return java.util.Collections.emptyList();
+        }
+
+        return list(null, true, keyword, limit == null ? 10 : limit);
+    }
+
 }

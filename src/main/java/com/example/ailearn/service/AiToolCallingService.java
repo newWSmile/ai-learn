@@ -6,6 +6,7 @@ import com.example.ailearn.enums.AiBizType;
 import com.example.ailearn.enums.AiToolName;
 import com.example.ailearn.model.dto.rp.AiToolCallDecision;
 import com.example.ailearn.model.dto.rp.AiToolChatResult;
+import com.example.ailearn.model.dto.rp.KnowledgeChangeLogToolResult;
 import com.example.ailearn.model.dto.rq.AiCallLogQueryRequest;
 import com.example.ailearn.model.dto.rq.AiToolChatRequest;
 import com.example.ailearn.model.vo.AiCallLogListVO;
@@ -201,14 +202,16 @@ public class AiToolCallingService {
                 - limit：查询数量，默认 20。
                 
                 4. QUERY_KNOWLEDGE_CHANGE_LOG
-                用途：查询某条知识片段的变更日志。
-                适用问题示例：
-                - 查一下 mclz_sample_record_not_submitted 的变更记录
-                - 留样台账未提交说明最近改过吗？
-                - 查询某条知识的修改历史
-                参数：
-                - knowledgeId：知识片段ID，必填。
-                - limit：查询数量，默认 10。
+               用途：查询某条知识片段的变更日志。
+               适用问题示例：
+               - 查一下 mclz_sample_record_not_submitted 的变更记录
+               - 留样台账未提交说明最近改过吗？
+               - 查询某条知识的修改历史
+               - 查一下摄像头离线说明的变更记录
+               参数：
+               - knowledgeId：知识片段ID，可选。如果用户明确提供 mclz_ 或 kc_ 开头的ID，应填写。
+               - keyword：知识标题或关键词，可选。如果用户没有提供 knowledgeId，但提供了知识标题，例如“留样台账未提交说明”，应填写 keyword。
+               - limit：查询数量，默认 10。
                 
                 5. NONE
                 用途：不需要调用工具。
@@ -227,6 +230,7 @@ public class AiToolCallingService {
                 6. 不得编造工具结果，工具结果由 Java 后端执行。
                 7. 如果问题里出现“最近 N 条”，arguments.limit 应填写 N。
                 8. 如果用户明确给出 knowledgeId，例如 mclz_sample_record_not_submitted，应放入 arguments.knowledgeId。
+                9. 如果用户没有提供 knowledgeId，但提供了知识标题或关键词，应放入 arguments.keyword。
                 
                 JSON 示例：
                 {
@@ -524,38 +528,121 @@ public class AiToolCallingService {
 
     /**
      * 执行工具：查询知识变更日志
+     *
+     * 支持两种方式：
+     * 1. 用户直接提供 knowledgeId；
+     * 2. 用户提供知识标题 / 关键词，系统先反查知识片段，再查询变更记录。
      */
     private AiToolChatResult queryKnowledgeChangeLog(String question, AiToolCallDecision decision) {
         String knowledgeId = getStringArgument(decision.getArguments(), "knowledgeId", null);
-        int limit = getIntArgument(decision.getArguments(), "limit", -1);
+        String keyword = getStringArgument(decision.getArguments(), "keyword", null);
 
+        int limit = getIntArgument(decision.getArguments(), "limit", -1);
         if (limit <= 0) {
             limit = parseLimitFromQuestion(question, 10);
         }
 
+        // 1. 如果模型没有抽取 knowledgeId，则从用户原始问题中兜底解析
         if (StrUtil.isBlank(knowledgeId)) {
             knowledgeId = parseKnowledgeIdFromQuestion(question);
         }
 
+        // 2. 如果没有 knowledgeId，则尝试从问题中抽取标题关键词
+        if (StrUtil.isBlank(keyword)) {
+            keyword = parseKnowledgeKeywordFromQuestion(question);
+        }
+
+        KnowledgeChangeLogToolResult toolResult = new KnowledgeChangeLogToolResult();
+
+        // 3. 如果有 knowledgeId，直接查询变更日志
+        if (StrUtil.isNotBlank(knowledgeId)) {
+            return buildKnowledgeChangeLogByIdResult(knowledgeId, limit, toolResult);
+        }
+
+        // 4. 没有 knowledgeId，也没有 keyword，无法查询
+        if (StrUtil.isBlank(keyword)) {
+            AiToolChatResult result = new AiToolChatResult();
+            result.setToolUsed(true);
+            result.setToolName(AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name());
+            result.setNeedReview(true);
+            result.setToolResult(toolResult);
+            result.setAnswer("请提供要查询的知识片段ID或知识标题，例如 mclz_sample_record_not_submitted 或 留样台账未提交说明。");
+            return result;
+        }
+
+        // 5. 根据标题 / 关键词查询候选知识
+        List<KnowledgeChunkVO> candidates = knowledgeManageService.searchCandidates(keyword, 10);
+        toolResult.setCandidates(candidates);
+
+        if (CollUtil.isEmpty(candidates)) {
+            AiToolChatResult result = new AiToolChatResult();
+            result.setToolUsed(true);
+            result.setToolName(AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name());
+            result.setNeedReview(true);
+            result.setToolResult(toolResult);
+            result.setAnswer("没有找到与“" + keyword + "”匹配的知识片段，请确认知识标题或提供知识ID。");
+            return result;
+        }
+
+        // 5.1 精确标题优先
+        KnowledgeChunkVO exactKnowledge = resolveExactKnowledge(keyword, candidates);
+        if (exactKnowledge != null) {
+            return buildKnowledgeChangeLogByIdResult(exactKnowledge.getId(), limit, toolResult);
+        }
+
+        // 6. 如果候选只有一条，自动使用该知识ID查询变更日志
+        if (candidates.size() == 1) {
+            KnowledgeChunkVO candidate = candidates.get(0);
+            return buildKnowledgeChangeLogByIdResult(candidate.getId(), limit, toolResult);
+        }
+
+        // 7. 如果候选多条，不自动猜，提示用户选择
         AiToolChatResult result = new AiToolChatResult();
         result.setToolUsed(true);
         result.setToolName(AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name());
-        result.setNeedReview(false);
+        result.setNeedReview(true);
+        result.setToolResult(toolResult);
+        result.setAnswer(buildCandidateSelectionAnswer(keyword, candidates));
+        return result;
+    }
 
-        if (StrUtil.isBlank(knowledgeId)) {
-            result.setAnswer("请提供要查询的知识片段ID，例如 mclz_sample_record_not_submitted。");
-            result.setToolResult(null);
-            result.setNeedReview(true);
-            return result;
+    /**
+     * 根据知识ID查询变更日志并构建工具返回
+     */
+    private AiToolChatResult buildKnowledgeChangeLogByIdResult(String knowledgeId,
+                                                               int limit,
+                                                               KnowledgeChangeLogToolResult toolResult) {
+        KnowledgeChunkVO knowledge = null;
+
+        try {
+            knowledge = knowledgeManageService.detail(knowledgeId);
+        } catch (Exception e) {
+            log.warn("查询知识详情失败，knowledgeId={}", knowledgeId, e);
         }
 
         List<KnowledgeChangeLogVO> list = knowledgeChangeLogService.listByKnowledgeId(knowledgeId, limit);
 
-        result.setToolResult(list);
-        result.setAnswer(buildKnowledgeChangeLogAnswer(knowledgeId, list));
+        toolResult.setResolved(true);
+        toolResult.setResolvedKnowledgeId(knowledgeId);
+        toolResult.setResolvedTitle(knowledge == null ? null : knowledge.getTitle());
+        toolResult.setChangeLogs(list);
+
+        AiToolChatResult result = new AiToolChatResult();
+        result.setToolUsed(true);
+        result.setToolName(AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name());
+        result.setToolResult(toolResult);
+        result.setNeedReview(false);
+        result.setAnswer(buildKnowledgeChangeLogAnswer(
+                knowledgeId,
+                knowledge == null ? null : knowledge.getTitle(),
+                list
+        ));
 
         log.info("工具执行完成，toolName={}，knowledgeId={}，limit={}，resultCount={}",
-                AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name(), knowledgeId, limit, list == null ? 0 : list.size());
+                AiToolName.QUERY_KNOWLEDGE_CHANGE_LOG.name(),
+                knowledgeId,
+                limit,
+                list == null ? 0 : list.size());
 
         return result;
     }
@@ -564,9 +651,18 @@ public class AiToolCallingService {
     /**
      * 将知识变更日志工具结果组织成回答
      */
-    private String buildKnowledgeChangeLogAnswer(String knowledgeId, List<KnowledgeChangeLogVO> list) {
+    /**
+     * 将知识变更日志工具结果组织成回答
+     */
+    private String buildKnowledgeChangeLogAnswer(String knowledgeId,
+                                                 String title,
+                                                 List<KnowledgeChangeLogVO> list) {
+        String displayName = StrUtil.isBlank(title)
+                ? knowledgeId
+                : title + "（" + knowledgeId + "）";
+
         if (CollUtil.isEmpty(list)) {
-            return "知识片段 " + knowledgeId + " 暂无变更记录。";
+            return "知识片段 " + displayName + " 暂无变更记录。";
         }
 
         String items = list.stream()
@@ -576,9 +672,89 @@ public class AiToolCallingService {
                         + "；时间：" + item.getGmtCreate())
                 .collect(Collectors.joining("\n"));
 
-        return "知识片段 " + knowledgeId + " 的变更记录如下：\n" + items;
+        return "知识片段 " + displayName + " 的变更记录如下：\n" + items;
     }
 
+    /**
+     * 构建候选知识选择提示
+     */
+    private String buildCandidateSelectionAnswer(String keyword, List<KnowledgeChunkVO> candidates) {
+        String items = candidates.stream()
+                .map(item -> "ID：" + item.getId()
+                        + "；标题：" + item.getTitle()
+                        + "；分类：" + item.getCategory()
+                        + "；启用：" + item.getEnabled())
+                .collect(Collectors.joining("\n"));
+
+        return "根据“" + keyword + "”找到多条可能的知识片段，请指定要查询的知识ID：\n" + items;
+    }
+
+    /**
+     * 从用户问题中兜底解析知识标题 / 关键词
+     *
+     * 示例：
+     * 查一下留样台账未提交说明的变更记录 -> 留样台账未提交说明
+     * 摄像头离线说明最近改过吗 -> 摄像头离线说明
+     */
+    private String parseKnowledgeKeywordFromQuestion(String question) {
+        if (StrUtil.isBlank(question)) {
+            return null;
+        }
+
+        String text = question;
+
+        // 去掉常见动作词
+        text = text.replace("查一下", "")
+                .replace("查询", "")
+                .replace("看一下", "")
+                .replace("查看", "")
+                .replace("最近", "")
+                .replace("有没有", "")
+                .replace("是否", "");
+
+        // 去掉变更记录类尾巴
+        text = text.replace("的变更记录", "")
+                .replace("变更记录", "")
+                .replace("修改历史", "")
+                .replace("变更历史", "")
+                .replace("最近改过吗", "")
+                .replace("改过吗", "")
+                .replace("更新记录", "")
+                .replace("操作记录", "");
+
+        text = text.trim();
+
+        // 如果清理后太短，认为无法解析
+        if (text.length() < 2) {
+            return null;
+        }
+
+        return text;
+    }
+
+    /**
+     * 根据关键词解析唯一知识片段
+     *
+     * 规则：
+     * 1. 先从候选里找 title 完全等于 keyword 的；
+     * 2. 如果精确匹配只有一条，直接返回；
+     * 3. 否则返回 null，交给多候选逻辑处理。
+     */
+    private KnowledgeChunkVO resolveExactKnowledge(String keyword, List<KnowledgeChunkVO> candidates) {
+        if (StrUtil.isBlank(keyword) || CollUtil.isEmpty(candidates)) {
+            return null;
+        }
+
+        List<KnowledgeChunkVO> exactList = candidates.stream()
+                .filter(item -> keyword.equals(item.getTitle()))
+                .collect(Collectors.toList());
+
+        if (exactList.size() == 1) {
+            return exactList.get(0);
+        }
+
+        return null;
+    }
 
     /**
      * 从 arguments 中读取字符串参数
